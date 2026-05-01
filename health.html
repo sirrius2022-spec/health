@@ -5,27 +5,40 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>스마트 보건관리 AI 에이전트</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Excel 저장을 위한 SheetJS 라이브러리 추가 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
+    /* 인쇄 시 가로 방향(Landscape) 및 A4 사이즈 설정 */
     @media print {
+      @page { size: A4 landscape; margin: 10mm; }
       body { background-color: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .no-print { display: none !important; }
       .print-only { display: block !important; }
       .print-container { padding: 0 !important; margin: 0 !important; max-width: 100% !important; box-shadow: none !important; border: none !important;}
-      table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-      th, td { border: 1px solid #000; padding: 12px; font-size: 14pt; }
-      th { background-color: #f3f4f6 !important; text-align: center; font-weight: bold; }
-      .report-image { max-height: 350px !important; object-fit: contain; }
-      @page { margin: 15mm; size: A4; }
+      
+      /* 프린트 전용 표 스타일 강제 적용 */
+      table { width: 100%; border-collapse: collapse; margin-top: 15px; page-break-inside: auto; }
+      tr { page-break-inside: avoid; page-break-after: auto; }
+      th, td { border: 1px solid #000 !important; padding: 8px !important; font-size: 10pt !important; word-break: keep-all; }
+      th { background-color: #1e3a8a !important; color: white !important; text-align: center; font-weight: bold; }
+      
+      .report-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+      .report-image { max-height: 250px !important; object-fit: contain; border: 1px solid #ccc; }
     }
+
+    /* 화면용 표 스타일 */
+    .custom-table th { background-color: #1e40af; color: white; text-align: center; border: 1px solid #94a3b8; padding: 12px 8px; font-size: 0.9rem; white-space: nowrap;}
+    .custom-table td { border: 1px solid #cbd5e1; padding: 12px 8px; font-size: 0.875rem; vertical-align: top; }
+    .custom-table tbody tr:nth-child(even) { background-color: #f8fafc; }
   </style>
 </head>
 <body class="min-h-screen bg-gray-50 flex flex-col font-sans">
 
   <!-- 헤더 -->
-  <header class="bg-emerald-700 text-white p-4 shadow-md text-center shrink-0">
+  <header class="bg-emerald-700 text-white p-4 shadow-md text-center shrink-0 no-print">
     <h1 class="text-xl md:text-2xl font-bold flex items-center justify-center gap-2">
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
-      스마트 보건관리 AI 에이전트
+      스마트 보건관리 AI 위험성평가 에이전트
     </h1>
   </header>
 
@@ -37,15 +50,15 @@
     <button onclick="saveApiKey()" class="bg-yellow-600 text-white px-4 py-1.5 rounded hover:bg-yellow-700 shrink-0 font-medium transition-colors">저장</button>
   </div>
 
-  <main class="flex-grow p-4 md:p-6 lg:max-w-4xl lg:mx-auto w-full print-container">
+  <main class="flex-grow p-4 md:p-6 lg:max-w-[1400px] lg:mx-auto w-full print-container">
     
     <!-- 1. 업로드 섹션 -->
-    <div id="upload-section" class="no-print bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center flex flex-col items-center justify-center min-h-[300px] mt-4">
+    <div id="upload-section" class="no-print bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center flex flex-col items-center justify-center min-h-[300px] mt-4 max-w-3xl mx-auto">
       <div class="bg-emerald-50 p-4 rounded-full mb-4 text-emerald-600">
         <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
       </div>
-      <h2 class="text-xl font-bold text-gray-800 mb-2">현장 사진 업로드</h2>
-      <p class="text-gray-500 mb-6 max-w-md">사진을 업로드하시면 AI가 4M 기반으로 위험 요인을 분석합니다.</p>
+      <h2 class="text-xl font-bold text-gray-800 mb-2">현장 사진 업로드 (4M 정밀 분석)</h2>
+      <p class="text-gray-500 mb-6 max-w-md">사진을 업로드하시면 AI가 4M 기반으로 분류하여 법령/KOSHA Guide와 함께 위험성평가표를 작성합니다.</p>
       
       <input type="file" id="file-input" accept="image/*" capture="environment" class="hidden" />
       <button onclick="triggerUpload()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-6 rounded-lg flex items-center gap-2 transition-colors shadow-md">
@@ -55,90 +68,87 @@
     </div>
 
     <!-- 2. 로딩 섹션 -->
-    <div id="loading-section" class="hidden no-print bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center flex flex-col items-center justify-center min-h-[300px] mt-4">
+    <div id="loading-section" class="hidden no-print bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center flex flex-col items-center justify-center min-h-[300px] mt-4 max-w-3xl mx-auto">
       <div class="text-emerald-600 animate-spin mb-4">
         <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
       </div>
       <h2 class="text-xl font-bold text-gray-800 mb-2" id="loading-text">분석 준비 중...</h2>
-      <p class="text-emerald-600 font-medium text-sm mt-2" id="loading-subtext">잠시만 기다려주세요 (최대 10~15초 소요)</p>
+      <p class="text-emerald-600 font-medium text-sm mt-2" id="loading-subtext">AI가 법령 및 KOSHA Guide를 매칭하고 있습니다. (약 10~20초 소요)</p>
     </div>
 
     <!-- 3. 에러 섹션 -->
-    <div id="error-section" class="hidden no-print bg-red-50 border border-red-200 rounded-xl p-6 text-center mt-4">
+    <div id="error-section" class="hidden no-print bg-red-50 border border-red-200 rounded-xl p-6 text-center mt-4 max-w-3xl mx-auto">
       <div class="text-red-500 mx-auto mb-2 flex justify-center">
         <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
       </div>
       <p class="text-red-700 font-bold mb-1">분석 중 오류가 발생했습니다.</p>
-      <p id="error-detail" class="text-red-600 text-sm mb-4 bg-red-100 p-2 rounded inline-block break-all max-w-full text-left font-mono"></p>
+      <p id="error-detail" class="text-red-600 text-sm mb-4 bg-red-100 p-3 rounded inline-block break-all max-w-full text-left font-mono whitespace-pre-line"></p>
       <br>
       <button onclick="resetForm()" class="bg-white border border-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-50 transition-colors">
         다시 시도
       </button>
     </div>
 
-    <!-- 4. 결과 보고서 섹션 -->
-    <div id="report-section" class="hidden bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden print:border-none print:shadow-none mt-4">
-      <div class="no-print bg-gray-50 px-4 py-3 border-b border-gray-200 flex flex-wrap gap-2 justify-between items-center">
-        <h3 class="font-bold text-gray-800">분석 완료</h3>
+    <!-- 4. 결과 보고서 섹션 (가로 포맷) -->
+    <div id="report-section" class="hidden bg-white shadow-sm border border-gray-200 mt-4 print:border-none print:shadow-none w-full">
+      
+      <!-- 액션 바 -->
+      <div class="no-print bg-gray-100 px-4 py-3 border-b border-gray-300 flex flex-wrap gap-2 justify-between items-center sticky top-0 z-10">
+        <h3 class="font-bold text-gray-800">📊 4M 기반 위험성 평가표 분석 완료</h3>
         <div class="flex gap-2">
-          <button onclick="resetForm()" class="bg-white border border-gray-300 text-gray-700 py-2 px-3 rounded hover:bg-gray-50 flex items-center gap-1 text-sm"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> 다시하기</button>
-          <button onclick="window.print()" class="bg-emerald-600 text-white py-2 px-3 rounded hover:bg-emerald-700 flex items-center gap-1 text-sm"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/></svg> PDF 저장</button>
+          <button onclick="resetForm()" class="bg-white border border-gray-400 text-gray-700 py-2 px-3 rounded shadow-sm hover:bg-gray-50 flex items-center gap-1 text-sm font-medium transition"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> 다시하기</button>
+          <button onclick="exportToExcel()" class="bg-[#107c41] text-white py-2 px-3 rounded shadow-sm hover:bg-green-800 flex items-center gap-1 text-sm font-medium transition"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="16" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg> Excel 저장</button>
+          <button onclick="window.print()" class="bg-blue-600 text-white py-2 px-3 rounded shadow-sm hover:bg-blue-700 flex items-center gap-1 text-sm font-medium transition"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/></svg> PDF 인쇄</button>
         </div>
       </div>
 
-      <div class="hidden print-only text-center mb-6">
-        <h1 class="text-2xl font-bold text-black border-b-2 border-black pb-2 inline-block">스마트 보건관리 점검 보고서</h1>
-      </div>
+      <!-- 보고서 본문 (출력 영역) -->
+      <div class="p-4 md:p-6 w-full">
+        
+        <!-- 타이틀 및 정보 영역 -->
+        <div class="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 border-b-2 border-gray-800 pb-4">
+          <div>
+            <h1 class="text-2xl font-bold text-black mb-2">스마트 보건관리 위험성 평가표</h1>
+            <p class="text-gray-700"><strong>점검일시:</strong> <span id="report-date"></span></p>
+            <p class="text-gray-700"><strong>점검장소:</strong> <span id="report-location"></span></p>
+          </div>
+          <div class="bg-gray-50 border border-gray-300 p-1 rounded-sm w-full sm:w-64 shrink-0 text-center">
+            <img id="report-image" src="" alt="현장 점검 사진" class="w-full h-auto max-h-[160px] object-contain rounded-sm" />
+            <p class="text-xs text-gray-500 mt-1 font-medium">현장 점검 사진</p>
+          </div>
+        </div>
 
-      <div class="p-4 md:p-6 overflow-x-auto">
-        <table class="w-full border-collapse border border-gray-300 min-w-[600px] print:min-w-full">
-          <tbody>
-            <tr>
-              <th class="border border-gray-300 bg-gray-100 p-3 w-1/4 sm:w-1/5 text-center font-bold text-gray-700">일시</th>
-              <td class="border border-gray-300 p-3 text-gray-800" id="report-date"></td>
-            </tr>
-            <tr>
-              <th class="border border-gray-300 bg-gray-100 p-3 text-center font-bold text-gray-700">장소</th>
-              <td class="border border-gray-300 p-3 text-gray-800" id="report-location"></td>
-            </tr>
-            <tr>
-              <th class="border border-gray-300 bg-gray-100 p-3 text-center font-bold text-gray-700 align-middle">현장 사진</th>
-              <td class="border border-gray-300 p-3 text-center bg-gray-50">
-                <img id="report-image" src="" alt="현장 점검 사진" class="report-image max-w-full h-auto max-h-[400px] mx-auto rounded border border-gray-200 shadow-sm" />
-              </td>
-            </tr>
-            <tr>
-              <th class="border border-gray-300 bg-gray-100 p-3 text-center font-bold text-gray-700 align-middle">
-                AI 분석결과<br/><span class="text-xs text-gray-500 font-normal mt-1 block">(4M 기반)</span>
-              </th>
-              <td class="border border-gray-300 p-4">
-                <div class="space-y-3 text-gray-800">
-                  <div class="flex flex-col sm:flex-row gap-1 sm:gap-3"><span class="font-bold text-emerald-800 min-w-[140px] shrink-0">■ 인적 (Man) :</span><span id="report-man"></span></div>
-                  <div class="flex flex-col sm:flex-row gap-1 sm:gap-3"><span class="font-bold text-emerald-800 min-w-[140px] shrink-0">■ 기계적 (Machine) :</span><span id="report-machine"></span></div>
-                  <div class="flex flex-col sm:flex-row gap-1 sm:gap-3"><span class="font-bold text-emerald-800 min-w-[140px] shrink-0">■ 환경적 (Media) :</span><span id="report-media"></span></div>
-                  <div class="flex flex-col sm:flex-row gap-1 sm:gap-3"><span class="font-bold text-emerald-800 min-w-[140px] shrink-0">■ 관리적 (Management) :</span><span id="report-management"></span></div>
-                </div>
-              </td>
-            </tr>
-            <tr>
-              <th class="border border-gray-300 bg-gray-100 p-3 text-center font-bold text-gray-700 align-middle">조치사항</th>
-              <td class="border border-gray-300 p-4">
-                <div class="bg-red-50 border-l-4 border-red-500 p-3 rounded">
-                  <p class="text-gray-800 font-medium whitespace-pre-line" id="report-action"></p>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <!-- 엑셀 추출용 메인 테이블 -->
+        <div class="overflow-x-auto w-full">
+          <table id="result-table" class="w-full border-collapse custom-table min-w-[1000px]">
+            <thead>
+              <tr>
+                <th style="width: 8%;">4M 구분</th>
+                <th style="width: 14%;">보건상 문제점</th>
+                <th style="width: 14%;">유해위험요인</th>
+                <th style="width: 9%;">위험성 결정<br><span class="text-[0.7rem] font-normal">(빈도x강도)</span></th>
+                <th style="width: 18%;">감소대책</th>
+                <th style="width: 13%;">최신 법령 근거</th>
+                <th style="width: 12%;">작업안전표준지침</th>
+                <th style="width: 12%;">KOSHA Guide</th>
+              </tr>
+            </thead>
+            <tbody id="report-table-body">
+              <!-- AI 데이터가 여기에 삽입됩니다 -->
+            </tbody>
+          </table>
+        </div>
+        
       </div>
     </div>
   </main>
 
-  <footer class="mt-auto py-6 bg-gray-100 border-t border-gray-200 text-center shrink-0">
+  <footer class="mt-auto py-6 bg-gray-100 border-t border-gray-200 text-center shrink-0 no-print">
     <p class="text-sm font-medium text-gray-600">제작자 : Rian Education Ryu Su Min</p>
   </footer>
 
   <script>
+    // --- 유틸리티 함수 ---
     window.onload = () => {
       const savedKey = localStorage.getItem('gemini_api_key');
       if (savedKey) document.getElementById('api-key-input').value = savedKey;
@@ -167,6 +177,7 @@
     function resetForm() {
       document.getElementById('file-input').value = '';
       document.getElementById('report-image').src = '';
+      document.getElementById('report-table-body').innerHTML = '';
       showSection('upload');
     }
 
@@ -178,6 +189,17 @@
       document.getElementById('file-input').click();
     }
 
+    // --- Excel 추출 기능 (SheetJS) ---
+    function exportToExcel() {
+      const table = document.getElementById("result-table");
+      const wb = XLSX.utils.table_to_book(table, { sheet: "위험성평가표" });
+      
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+      XLSX.writeFile(wb, `보건관리_위험성평가표_${dateStr}.xlsx`);
+    }
+
+    // --- 이미지 처리 ---
     function resizeImage(file, callback) {
       const reader = new FileReader();
       reader.onload = function(e) {
@@ -210,7 +232,6 @@
       if (file) {
         showSection('loading');
         document.getElementById('loading-text').textContent = '이미지 최적화 중...';
-        document.getElementById('loading-subtext').textContent = '';
         
         resizeImage(file, function(base64String) {
           document.getElementById('report-image').src = base64String;
@@ -219,6 +240,7 @@
       }
     });
 
+    // --- AI API 통신 및 분석 ---
     async function analyzeImage(base64String) {
       const apiKey = document.getElementById('api-key-input').value.trim();
       const base64Data = base64String.split(',')[1];
@@ -229,45 +251,43 @@
         const listResponse = await fetch(listUrl);
         
         if (!listResponse.ok) {
-            const errData = await listResponse.json();
-            const errMsg = errData.error?.message || "";
-            // 할당량(Quota) 초과 에러인 경우 한국어로 친절하게 안내
-            if (errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('rate')) {
-                throw new Error("🚨 API 키의 무료 사용량이 초과되었거나, 해당 계정에서 AI 사용이 제한되었습니다.\n\n해결법: 개인용 구글 계정으로 Google AI Studio에 접속하여 '새로운 프로젝트'에서 API 키를 다시 발급받아 주세요.");
-            }
-            throw new Error("API 키가 올바르지 않거나 권한이 없습니다. (Google AI Studio에서 키를 확인해주세요)");
+            throw new Error(`API 키 검증 실패. 올바른 프로젝트의 키인지 확인하세요.`);
         }
         
         const listData = await listResponse.json();
-        
-        const availableModels = listData.models.filter(m => 
-            m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent")
-        );
+        const availableModels = listData.models.filter(m => m.supportedGenerationMethods?.includes("generateContent"));
 
-        let targetModel = availableModels.find(m => m.name.includes("gemini-1.5-flash"));
-        if (!targetModel) targetModel = availableModels.find(m => m.name.includes("gemini-1.5"));
-        if (!targetModel) targetModel = availableModels.find(m => m.name.includes("gemini-pro"));
+        let targetModel = availableModels.find(m => m.name.includes("gemini-1.5-pro")); // 정밀 분석을 위해 Pro 우선
+        if (!targetModel) targetModel = availableModels.find(m => m.name.includes("gemini-1.5-flash"));
         if (!targetModel) targetModel = availableModels[0]; 
 
-        if (!targetModel) {
-            throw new Error("해당 구글 계정에서 사용할 수 있는 모델이 없습니다.");
-        }
-
+        if (!targetModel) throw new Error("사용할 수 있는 AI 모델이 없습니다.");
         const modelName = targetModel.name; 
 
-        document.getElementById('loading-text').textContent = 'AI 4M 위험성 평가 분석 중...';
-        document.getElementById('loading-subtext').textContent = `(접속 모델: ${modelName.replace('models/', '')})`;
+        document.getElementById('loading-text').textContent = '표준양식 기반 4M 위험성 평가 작성 중...';
+        document.getElementById('loading-subtext').textContent = `(접속 모델: ${modelName.replace('models/', '')}) | 복잡한 양식이므로 약 15초 정도 소요됩니다.`;
 
         const url = `https://generativelanguage.googleapis.com/v1beta/${modelName}:generateContent?key=${apiKey}`;
 
-        const prompt = `당신은 건설현장 보건/안전 전문가입니다. 사진을 보고 다음 항목을 포함한 JSON 형식으로만 응답하세요. 마크다운 기호(\`\`\`json)나 다른 설명은 절대 넣지 마세요.
+        // 프롬프트: 사용자가 요청한 엑셀 양식의 헤더에 맞추어 JSON 배열로 응답하도록 강제
+        const prompt = `당신은 대한민국 최고 수준의 건설현장 보건/안전 전문가입니다. 
+        첨부된 사진을 꼼꼼히 분석하고, 발견된 위험 요인을 4M(Man, Machine, Media, Management)으로 분류하여 다음 JSON 배열 형식으로만 정확히 응답하세요. 마크다운 기호(\`\`\`json)나 다른 텍스트는 절대 넣지 마세요.
+        각 4M 항목별로 최소 1개, 최대 2개씩 추출하여 배열에 담아주세요. (사진에 없는 항목은 추론하거나 일반적인 현장 특성을 반영하세요)
+
         {
-          "location": "사진을 바탕으로 추정한 현장 장소",
-          "man": "[Man/인적] 작업자 상태, 보호구 착용 여부 등",
-          "machine": "[Machine/기계적] 기계/기구 상태, 방호장치 등",
-          "media": "[Media/물질·환경적] 조도, 소음, 분진, 정리정돈 등",
-          "management": "[Management/관리적] 표지판, 통제구역, 작업지휘 등",
-          "action": "종합적인 개선 조치사항"
+          "location": "사진으로 추정되는 작업 장소명",
+          "items": [
+            {
+              "category_4m": "인적 (Man) 또는 기계적 (Machine) 또는 환경적 (Media) 또는 관리적 (Management)",
+              "problem": "보건상 문제점 (예: 유기용제 흡입으로 인한 호흡기 질환)",
+              "hazard": "유해위험요인 (예: 에폭시 신너, 보호구 미착용 등)",
+              "risk": "16 (높음) 또는 20 (매우 높음) 등 임의 산정",
+              "measure": "감소대책 (- 기호로 시작, 줄바꿈 포함)",
+              "law": "산업안전보건법 제O조(O) 등 최신 법령 근거",
+              "guideline": "관련 작업안전표준지침 명칭",
+              "kosha": "KOSHA Guide O-00-20XX 형태"
+            }
+          ]
         }`;
 
         const payload = {
@@ -283,43 +303,67 @@
         if (!response.ok) {
           const errData = await response.json();
           const errMsg = errData.error?.message || "";
-          
-          // 여기서도 할당량 초과 에러 검출
-          if (errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('rate')) {
-              throw new Error("🚨 API 키의 무료 사용량이 초과되었습니다.\n\n해결법: 새로운 구글 계정으로 로그인하여 API 키를 새로 발급받아 입력해주세요.");
-          }
-          
-          throw new Error(errMsg || `HTTP 에러: ${response.status}`);
+          throw new Error(`서버 통신 오류\n(원문: ${errMsg})`);
         }
 
         const result = await response.json();
         let textResponse = result.candidates?.[0]?.content?.parts?.[0]?.text;
         
-        if (!textResponse) throw new Error("AI가 응답을 생성하지 못했습니다.");
+        if (!textResponse) throw new Error("AI가 응답 텍스트를 생성하지 못했습니다.");
 
         const firstBrace = textResponse.indexOf('{');
         const lastBrace = textResponse.lastIndexOf('}');
         if (firstBrace === -1 || lastBrace === -1) {
-             throw new Error("AI 응답 형식이 올바르지 않습니다.");
+             throw new Error(`AI 응답 파싱 실패.\n\n응답 내용:\n${textResponse}`);
         }
         
         const jsonStr = textResponse.substring(firstBrace, lastBrace + 1);
         const reportData = JSON.parse(jsonStr);
         
+        // 데이터 화면 바인딩
         const now = new Date();
         document.getElementById('report-date').textContent = `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일`;
         document.getElementById('report-location').textContent = reportData.location || '분석 불가';
-        document.getElementById('report-man').textContent = reportData.man || '특이사항 없음';
-        document.getElementById('report-machine').textContent = reportData.machine || '특이사항 없음';
-        document.getElementById('report-media').textContent = reportData.media || '특이사항 없음';
-        document.getElementById('report-management').textContent = reportData.management || '특이사항 없음';
-        document.getElementById('report-action').textContent = reportData.action || '조치사항 없음';
+
+        const tbody = document.getElementById('report-table-body');
+        tbody.innerHTML = ''; // 초기화
+
+        // AI가 생성한 items 배열을 순회하며 테이블의 행(tr) 생성
+        if(reportData.items && reportData.items.length > 0) {
+          reportData.items.forEach(item => {
+            const tr = document.createElement('tr');
+            
+            // 4M 구분에 따른 글자 색상 지정
+            let colorClass = "text-gray-800 font-bold";
+            if(item.category_4m.includes("Man") || item.category_4m.includes("인적")) colorClass = "text-blue-700 font-bold";
+            if(item.category_4m.includes("Machine") || item.category_4m.includes("기계")) colorClass = "text-orange-700 font-bold";
+            if(item.category_4m.includes("Media") || item.category_4m.includes("환경")) colorClass = "text-green-700 font-bold";
+            if(item.category_4m.includes("Management") || item.category_4m.includes("관리")) colorClass = "text-purple-700 font-bold";
+
+            // 감소대책 줄바꿈(\n) 처리
+            const formattedMeasure = item.measure ? item.measure.replace(/\n/g, '<br>') : '';
+
+            tr.innerHTML = `
+              <td class="${colorClass} text-center bg-gray-50">${item.category_4m || '-'}</td>
+              <td>${item.problem || '-'}</td>
+              <td>${item.hazard || '-'}</td>
+              <td class="text-center font-medium text-red-700">${item.risk || '-'}</td>
+              <td>${formattedMeasure}</td>
+              <td class="text-xs text-gray-700">${item.law || '-'}</td>
+              <td class="text-xs text-gray-700">${item.guideline || '-'}</td>
+              <td class="text-xs text-gray-700 font-medium">${item.kosha || '-'}</td>
+            `;
+            tbody.appendChild(tr);
+          });
+        } else {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td colspan="8" class="text-center py-4">분석된 유해요인이 없습니다.</td>`;
+            tbody.appendChild(tr);
+        }
 
         showSection('report');
       } catch (err) {
         console.error(err);
-        // 에러 메시지가 줄바꿈(\n)을 포함하고 있을 수 있으므로 whitespace-pre-line 적용
-        document.getElementById('error-detail').classList.add('whitespace-pre-line');
         document.getElementById('error-detail').textContent = err.message;
         showSection('error');
       }
